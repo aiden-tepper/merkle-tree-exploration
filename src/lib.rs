@@ -20,8 +20,14 @@ pub mod merkle_tree {
         return hasher.result_str();
     }
 
+    enum Node {
+        Empty,
+        Leaf { hash: String, data: String },
+        Branch { hash: String, left: Box<Node>, right: Box<Node> },
+    }
+
     pub struct MerkleTree {
-        // TODO
+        root: Node,
     }
 
     pub struct MerkleProof {
@@ -34,7 +40,40 @@ pub mod merkle_tree {
     // the tree should have the minimum height needed to contain all elements
     // empty slots should be filled with an empty string
     pub fn create_merkle_tree(elements: &Vec<String>) -> Result<MerkleTree, String> {
-        // TODO
+        if elements.is_empty() {
+            return Ok(MerkleTree { root: Node::Empty });
+        }
+    
+        let root = create_node(elements);
+        Ok(MerkleTree { root })
+    }
+
+    pub fn create_node(elements: &[String]) -> Node {
+        if elements.len() == 1 {
+            return Node::Leaf {
+                hash: hash_leaf(&elements[0]),
+                data: elements[0].clone(),
+            };
+        }
+    
+        let mid = elements.len() / 2;
+        let left = create_node(&elements[0..mid]);
+        let right = create_node(&elements[mid..]);
+    
+        Node::Branch {
+            hash: hash_node(
+                &match &left {
+                    Node::Leaf { hash, .. } | Node::Branch { hash, .. } => hash,
+                    Node::Empty => "",
+                },
+                &match &right {
+                    Node::Leaf { hash, .. } | Node::Branch { hash, .. } => hash,
+                    Node::Empty => "",
+                },
+            ),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
     }
 
     // return a merkle proof of the inclusion of element at the given index
