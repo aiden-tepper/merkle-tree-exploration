@@ -36,6 +36,14 @@ pub mod merkle_tree {
         directions: Vec<bool>       // signal if the sibling at the same index is on the left or right
     }
 
+    pub fn get_root(mt: &MerkleTree) -> String {
+        match &mt.root {
+            Node::Empty => return String::new(),
+            Node::Leaf { hash, .. } => return hash.to_string(),
+            Node::Branch { hash, .. } => return hash.to_string(), 
+        }
+    }
+
     // create a merkle tree from a list of elements
     // the tree should have the minimum height needed to contain all elements
     // empty slots should be filled with an empty string
@@ -48,7 +56,7 @@ pub mod merkle_tree {
         Ok(MerkleTree { root })
     }
 
-    pub fn create_node(elements: &[String]) -> Node {
+    fn create_node(elements: &[String]) -> Node {
         if elements.len() == 1 {
             return Node::Leaf {
                 hash: hash_leaf(&elements[0]),
@@ -92,21 +100,80 @@ pub mod merkle_tree {
     // siblings   = [d3-3, d2-0, d1-1]
     // directions = [false, true, false]
     pub fn get_proof(t: &MerkleTree, index: usize) -> Result<MerkleProof, String> {
-        // TODO
+        let root = &t.root;
+        let elements = collect_elements(root);
+    
+        if index >= elements.len() {
+            return Err(String::from("Index out of bounds"));
+        }
+    
+        let element = elements[index].clone();
+        let mut siblings = Vec::new();
+        let mut directions = Vec::new();
+    
+        let mut current_node = root;
+        let mut current_index = index;
+    
+        while let Node::Branch { left, right, .. } = current_node {
+            let (sibling_node, direction) = if current_index % 2 == 0 {
+                (&right, true)
+            } else {
+                (&left, false)
+            };
+    
+            if let Node::Leaf { hash, .. } = &***sibling_node {
+                siblings.push(hash.clone());
+                directions.push(direction);
+            } else {
+                return Err(String::from("Invalid sibling node type"));
+            }
+    
+            current_node = sibling_node;
+            current_index /= 2;
+        }
+    
+        Ok(MerkleProof {
+            element,
+            siblings,
+            directions,
+        })
+    }
+    
+    // Helper function to collect leaf nodes' elements in-order
+    fn collect_elements(node: &Node) -> Vec<String> {
+        match node {
+            Node::Leaf { data, .. } => vec![data.clone()],
+            Node::Branch { left, right, .. } => {
+                let mut elements = collect_elements(left);
+                elements.extend(collect_elements(right));
+                elements
+            }
+            Node::Empty => Vec::new(),
+        }
     }
 
     // verify a merkle tree against a known root
     pub fn verify_proof(root: String, proof: &MerkleProof) -> bool {
-        // TODO
+        let mut current_hash = hash_leaf(&proof.element);
+
+    for (sibling_hash, direction) in proof.siblings.iter().zip(proof.directions.iter()) {
+        if *direction {
+            current_hash = hash_node(&current_hash, sibling_hash);
+        } else {
+            current_hash = hash_node(sibling_hash, &current_hash);
+        }
+    }
+
+    current_hash == root
     }
 
     // ** BONUS (optional - easy) **
     // Updates the Merkle tree (from leaf to root) to include the new element at index.
     // For simplicity, the index must be within the bounds of the original vector size.
     // If it is not, return an error.
-    pub fn (t: MerkleTree) update_element(index: usize, element: &str) -> Result<MerkleTree, String> {
-        // TODO
-    }
+    // pub fn (t: MerkleTree) update_element(index: usize, element: &str) -> Result<MerkleTree, String> {
+    //     // TODO
+    // }
 
     // ** BONUS (optional - hard) **
     // Generates a Merkle proof of the inclusion of contiguous elements,
@@ -118,9 +185,9 @@ pub mod merkle_tree {
     //
     // The aggregated proof size should generally be smaller than
     // that of the naive approach (calling GetProof for every index).
-    pub fn get_aggregate_proof(t: &MerkleTree, start_index: usize, end_index: usize) -> () {
-        // TODO
-    }
+    // pub fn get_aggregate_proof(t: &MerkleTree, start_index: usize, end_index: usize) -> () {
+    //     // TODO
+    // }
 }
 
 #[cfg(test)]
