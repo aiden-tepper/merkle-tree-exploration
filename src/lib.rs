@@ -1,12 +1,12 @@
 pub mod merkle_tree {
 
-    use crypto::sha2::Sha256;
     use crypto::digest::Digest;
-    use std::vec::Vec;
+    use crypto::sha2::Sha256;
     use std::result::Result;
+    use std::vec::Vec;
 
     // hash function to be used for the construction of the merkle tree
-    pub fn hash_leaf (leaf: &str) -> String {
+    pub fn hash_leaf(leaf: &str) -> String {
         let mut hasher = Sha256::new();
         hasher.input_str(leaf);
         return hasher.result_str();
@@ -22,8 +22,15 @@ pub mod merkle_tree {
 
     enum Node {
         Empty,
-        Leaf { hash: String, data: String },
-        Branch { hash: String, left: Box<Node>, right: Box<Node> },
+        Leaf {
+            hash: String,
+            data: String,
+        },
+        Branch {
+            hash: String,
+            left: Box<Node>,
+            right: Box<Node>,
+        },
     }
 
     pub struct MerkleTree {
@@ -31,16 +38,16 @@ pub mod merkle_tree {
     }
 
     pub struct MerkleProof {
-        element:    String,         // element for which we want to prove inclusion
-        siblings:   Vec<String>,    // path of siblings from the element up to the root
-        directions: Vec<bool>       // signal if the sibling at the same index is on the left or right
+        element: String,       // element for which we want to prove inclusion
+        siblings: Vec<String>, // path of siblings from the element up to the root
+        directions: Vec<bool>, // signal if the sibling at the same index is on the left or right
     }
 
     pub fn get_root(mt: &MerkleTree) -> String {
         match &mt.root {
             Node::Empty => return String::new(),
             Node::Leaf { hash, .. } => return hash.to_string(),
-            Node::Branch { hash, .. } => return hash.to_string(), 
+            Node::Branch { hash, .. } => return hash.to_string(),
         }
     }
 
@@ -51,9 +58,31 @@ pub mod merkle_tree {
         if elements.is_empty() {
             return Ok(MerkleTree { root: Node::Empty });
         }
-    
-        let root = create_node(elements);
+
+        let padded_elements = pad_elements(elements);
+
+        let root = create_node(&padded_elements);
         Ok(MerkleTree { root })
+    }
+
+    // helper function to fill empty slots with empty strings
+    fn pad_elements(elements: &Vec<String>) -> Vec<String> {
+        let num_elements: u32 = elements.len().try_into().unwrap();
+        let target_size = 1 << (32 - num_elements.leading_zeros());
+
+        let diff = if num_elements > target_size {
+            num_elements - target_size
+        } else {
+            target_size - num_elements
+        };
+
+        let mut padded_elements = elements.clone();
+
+        for _ in 0..diff {
+            padded_elements.push(String::new());
+        }
+
+        return padded_elements;
     }
 
     fn create_node(elements: &[String]) -> Node {
@@ -63,11 +92,11 @@ pub mod merkle_tree {
                 data: elements[0].clone(),
             };
         }
-    
+
         let mid = elements.len() / 2;
         let left = create_node(&elements[0..mid]);
         let right = create_node(&elements[mid..]);
-    
+
         Node::Branch {
             hash: hash_node(
                 &match &left {
@@ -102,43 +131,43 @@ pub mod merkle_tree {
     pub fn get_proof(t: &MerkleTree, index: usize) -> Result<MerkleProof, String> {
         let root = &t.root;
         let elements = collect_elements(root);
-    
+
         if index >= elements.len() {
             return Err(String::from("Index out of bounds"));
         }
-    
+
         let element = elements[index].clone();
         let mut siblings = Vec::new();
         let mut directions = Vec::new();
-    
+
         let mut current_node = root;
         let mut current_index = index;
-    
+
         while let Node::Branch { left, right, .. } = current_node {
             let (sibling_node, direction) = if current_index % 2 == 0 {
                 (&right, true)
             } else {
                 (&left, false)
             };
-    
+
             if let Node::Leaf { hash, .. } = &***sibling_node {
                 siblings.push(hash.clone());
                 directions.push(direction);
             } else {
                 return Err(String::from("Invalid sibling node type"));
             }
-    
+
             current_node = sibling_node;
             current_index /= 2;
         }
-    
+
         Ok(MerkleProof {
             element,
             siblings,
             directions,
         })
     }
-    
+
     // Helper function to collect leaf nodes' elements in-order
     fn collect_elements(node: &Node) -> Vec<String> {
         match node {
@@ -156,15 +185,15 @@ pub mod merkle_tree {
     pub fn verify_proof(root: String, proof: &MerkleProof) -> bool {
         let mut current_hash = hash_leaf(&proof.element);
 
-    for (sibling_hash, direction) in proof.siblings.iter().zip(proof.directions.iter()) {
-        if *direction {
-            current_hash = hash_node(&current_hash, sibling_hash);
-        } else {
-            current_hash = hash_node(sibling_hash, &current_hash);
+        for (sibling_hash, direction) in proof.siblings.iter().zip(proof.directions.iter()) {
+            if *direction {
+                current_hash = hash_node(&current_hash, sibling_hash);
+            } else {
+                current_hash = hash_node(sibling_hash, &current_hash);
+            }
         }
-    }
 
-    current_hash == root
+        current_hash == root
     }
 
     // ** BONUS (optional - easy) **
@@ -196,43 +225,46 @@ mod tests {
 
     #[test]
     fn test_root() {
-        let elements = vec!["some".to_string(), "test".to_string(), "elements".to_string()];
+        let elements = vec![
+            "some".to_string(),
+            "test".to_string(),
+            "elements".to_string(),
+        ];
 
         let expected_root = hash_node(
-            &hash_node(
-                &hash_leaf("some"),
-                &hash_leaf("test")
-                ),
-            &hash_node(
-                &hash_leaf("elements"),
-                &hash_leaf("")
-                )
-            );
+            &hash_node(&hash_leaf("some"), &hash_leaf("test")),
+            &hash_node(&hash_leaf("elements"), &hash_leaf("")),
+        );
 
         let mt = create_merkle_tree(&elements);
 
         match mt {
             Ok(mt) => assert_eq!(get_root(&mt), expected_root),
-            Err(e) => println!("{}", e)
+            Err(e) => println!("{}", e),
         }
     }
 
     #[test]
     fn test_proof() {
-        let elements = vec!["some".to_string(), "test".to_string(), "elements".to_string()];
+        let elements = vec![
+            "some".to_string(),
+            "test".to_string(),
+            "elements".to_string(),
+        ];
         let mt = create_merkle_tree(&elements);
 
         match mt {
-            Ok(mt) =>
+            Ok(mt) => {
                 for i in 0..elements.len() {
                     let proof = get_proof(&mt, i);
 
                     match proof {
                         Ok(p) => assert!(verify_proof(get_root(&mt), &p)),
-                        Err(e) => println!("{}", e)
+                        Err(e) => println!("{}", e),
                     }
                 }
-            Err(e) => println!("{}", e)
+            }
+            Err(e) => println!("{}", e),
         }
     }
 }
