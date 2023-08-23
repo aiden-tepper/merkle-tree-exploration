@@ -9,7 +9,7 @@ pub mod merkle_tree {
     pub fn hash_leaf(leaf: &str) -> String {
         let mut hasher = Sha256::new();
         hasher.input_str(leaf);
-        return hasher.result_str();
+        hasher.result_str()
     }
 
     // hash function to be used for the construction of the merkle tree
@@ -17,7 +17,7 @@ pub mod merkle_tree {
         let mut hasher = Sha256::new();
         hasher.input_str(left);
         hasher.input_str(right);
-        return hasher.result_str();
+        hasher.result_str()
     }
 
     enum Node {
@@ -45,9 +45,9 @@ pub mod merkle_tree {
 
     pub fn get_root(mt: &MerkleTree) -> String {
         match &mt.root {
-            Node::Empty => return String::new(),
-            Node::Leaf { hash, .. } => return hash.to_string(),
-            Node::Branch { hash, .. } => return hash.to_string(),
+            Node::Empty => String::new(),
+            Node::Leaf { hash, .. } => hash.to_string(),
+            Node::Branch { hash, .. } => hash.to_string(),
         }
     }
 
@@ -82,7 +82,7 @@ pub mod merkle_tree {
             padded_elements.push(String::new());
         }
 
-        return padded_elements;
+        padded_elements
     }
 
     fn create_node(elements: &[String]) -> Node {
@@ -99,11 +99,11 @@ pub mod merkle_tree {
 
         Node::Branch {
             hash: hash_node(
-                &match &left {
+                match &left {
                     Node::Leaf { hash, .. } | Node::Branch { hash, .. } => hash,
                     Node::Empty => "",
                 },
-                &match &right {
+                match &right {
                     Node::Leaf { hash, .. } | Node::Branch { hash, .. } => hash,
                     Node::Empty => "",
                 },
