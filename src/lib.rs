@@ -38,9 +38,9 @@ pub mod merkle_tree {
     }
 
     pub struct MerkleProof {
-        element: String,       // element for which we want to prove inclusion
-        siblings: Vec<String>, // path of siblings from the element up to the root
-        directions: Vec<bool>, // signal if the sibling at the same index is on the left or right
+        pub element: String,       // element for which we want to prove inclusion
+        pub siblings: Vec<String>, // path of siblings from the element up to the root
+        pub directions: Vec<bool>, // signal if the sibling at the same index is on the left or right
     }
 
     pub fn get_root(mt: &MerkleTree) -> String {
@@ -87,6 +87,11 @@ pub mod merkle_tree {
 
     fn create_node(elements: &[String]) -> Node {
         if elements.len() == 1 {
+            println!(
+                "creating node \"{}\" with hash: {}",
+                elements[0].clone(),
+                hash_leaf(&elements[0])
+            );
             return Node::Leaf {
                 hash: hash_leaf(&elements[0]),
                 data: elements[0].clone(),
@@ -96,6 +101,18 @@ pub mod merkle_tree {
         let mid = elements.len() / 2;
         let left = create_node(&elements[0..mid]);
         let right = create_node(&elements[mid..]);
+
+        let hash = hash_node(
+            match &left {
+                Node::Leaf { hash, .. } | Node::Branch { hash, .. } => hash,
+                Node::Empty => "",
+            },
+            match &right {
+                Node::Leaf { hash, .. } | Node::Branch { hash, .. } => hash,
+                Node::Empty => "",
+            },
+        );
+        println!("creating branch with hash: {}\n", hash);
 
         Node::Branch {
             hash: hash_node(
@@ -131,8 +148,9 @@ pub mod merkle_tree {
     pub fn get_proof(t: &MerkleTree, index: usize) -> Result<MerkleProof, String> {
         let root = &t.root;
         let elements = collect_elements(root);
+        let num_elements = elements.len();
 
-        if index >= elements.len() {
+        if index >= num_elements {
             return Err(String::from("Index out of bounds"));
         }
 
@@ -141,25 +159,73 @@ pub mod merkle_tree {
         let mut directions = Vec::new();
 
         let mut current_node = root;
-        let mut current_index = index;
+        let h = (num_elements as f32).log2() as usize;
 
-        while let Node::Branch { left, right, .. } = current_node {
-            let (sibling_node, direction) = if current_index % 2 == 0 {
-                (&right, true)
-            } else {
-                (&left, false)
-            };
 
-            if let Node::Leaf { hash, .. } = &***sibling_node {
-                siblings.push(hash.clone());
-                directions.push(direction);
-            } else {
-                return Err(String::from("Invalid sibling node type"));
+
+
+
+
+        let binary_str = format!("{:0h$b}", index, h = h);
+        // println!("Binary representation of {}: {}", index, binary_str);
+        let binary_vec: Vec<_> = binary_str.chars().map(|c| c.to_digit(2).unwrap()).collect();
+        // println!("Binary vector: {:?}", binary_vec);
+
+        for b in &binary_vec {
+            if let Node::Branch { left, right, .. } = current_node {
+                let (sibling_node, next_node, direction) = if *b == 0 {
+                    (right, left, true)
+                } else {
+                    (left, right, false)
+                };
+
+                match &**sibling_node {
+                    Node::Branch { hash, .. } => {
+                        siblings.push(hash.clone());
+                        directions.push(direction);
+                    }
+                    Node::Leaf { hash, .. } => {
+                        siblings.push(hash.clone());
+                        directions.push(direction);
+                    }
+                    Node::Empty => return Err(String::from("Invalid sibling node type")),
+                }
+
+                current_node = next_node;
             }
-
-            current_node = sibling_node;
-            current_index /= 2;
         }
+
+
+
+
+
+
+        // let mut current_index = index;
+        // while let Node::Branch { left, right, .. } = current_node {
+        //     let (sibling_node, direction) = if current_index % 2 == 0 {
+        //         (right, true)
+        //     } else {
+        //         (left, false)
+        //     };
+
+        //     match &**sibling_node {
+        //         Node::Branch { hash, .. } => {
+        //             siblings.push(hash.clone());
+        //             directions.push(direction);
+        //         }
+        //         Node::Leaf { hash, .. } => {
+        //             siblings.push(hash.clone());
+        //             directions.push(direction);
+        //         }
+        //         Node::Empty => return Err(String::from("Invalid sibling node type")),
+        //     }
+
+        //     current_node = if direction {left} else {right};
+        //     current_index /= 2;
+        // }
+
+        siblings.reverse();
+        directions.reverse();
 
         Ok(MerkleProof {
             element,
@@ -191,6 +257,7 @@ pub mod merkle_tree {
             } else {
                 current_hash = hash_node(sibling_hash, &current_hash);
             }
+            println!("current_hash: {}", current_hash);
         }
 
         current_hash == root
@@ -200,7 +267,7 @@ pub mod merkle_tree {
     // Updates the Merkle tree (from leaf to root) to include the new element at index.
     // For simplicity, the index must be within the bounds of the original vector size.
     // If it is not, return an error.
-    // pub fn (t: MerkleTree) update_element(index: usize, element: &str) -> Result<MerkleTree, String> {
+    // pub fn update_element(t: &MerkleTree, index: usize, element: &str) -> Result<MerkleTree, String> {
     //     // TODO
     // }
 
@@ -259,7 +326,12 @@ mod tests {
                     let proof = get_proof(&mt, i);
 
                     match proof {
-                        Ok(p) => assert!(verify_proof(get_root(&mt), &p)),
+                        Ok(p) => {
+                            println!("\n-------- {}", p.element);
+                            println!("-------- {:?}", p.siblings);
+                            println!("-------- {:?}\n", p.directions);
+                            assert!(verify_proof(get_root(&mt), &p))
+                        }
                         Err(e) => println!("{}", e),
                     }
                 }
